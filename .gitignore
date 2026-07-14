@@ -1,0 +1,46 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Assignment/private source materials
+AI工程师实习生笔试题.pdf
+*.pdf
+ai_exam_page-*.png
+
+# Generated media outputs
+static/outputs/
+app/static/outputs/
+outputs/
+*.mp4
+*.mp3
+*.wav
+*.m4a
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Playwright/Crawlee caches
+.playwright/
+.crawlee/
+storage/
+
+# Logs and temp files
+*.log
+logs/
+tmp/
+temp/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
