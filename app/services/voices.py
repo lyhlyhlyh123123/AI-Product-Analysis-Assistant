@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 
 from app.config import Settings
-from app.models import CreateVoiceRequest, CreateVoiceResponse, VoiceProfile
+from app.models import CreateVoiceRequest, CreateVoiceResponse, DeleteVoiceResponse, VoiceProfile
 
 VOICE_DESIGN_MODEL = "qwen-voice-design"
 PREVIEW_TEXT = "大家好，欢迎来到我们的直播间！今天给大家推荐的这款产品真的超级好用。"
@@ -66,6 +66,42 @@ def create_voice_profile(request: CreateVoiceRequest, settings: Settings | None 
     profiles.append(profile)
     _write_profiles(settings.output_dir, profiles)
     return CreateVoiceResponse(profile=profile)
+
+
+def delete_voice_profile(voice_id: str, settings: Settings | None = None) -> DeleteVoiceResponse:
+    settings = settings or Settings.from_env()
+    target = voice_id.strip()
+    if not target:
+        return DeleteVoiceResponse(warnings=["请选择要删除的音色。"])
+
+    profiles = list_voice_profiles(settings)
+    matched_profile = next((profile for profile in profiles if profile.voice_id == target or profile.id == target), None)
+    delete_voice_id = matched_profile.voice_id if matched_profile else target
+    remaining = [profile for profile in profiles if profile.voice_id != delete_voice_id and profile.id != target]
+    matched = matched_profile is not None
+
+    warnings: list[str] = []
+    if settings.has_dashscope_tts:
+        payload = {"model": VOICE_DESIGN_MODEL, "input": {"action": "delete", "voice": delete_voice_id}}
+        try:
+            response = httpx.post(
+                f"{settings.dashscope_base_url.rstrip('/')}/services/audio/tts/customization",
+                json=payload,
+                headers={"Authorization": f"Bearer {settings.dashscope_api_key}", "Content-Type": "application/json"},
+                timeout=60.0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return DeleteVoiceResponse(voice_id=delete_voice_id, warnings=[f"DashScope 删除音色请求失败：{exc}"])
+        if response.status_code != 200:
+            return DeleteVoiceResponse(voice_id=delete_voice_id, warnings=[_response_error_message("DashScope 删除音色失败", response)])
+    else:
+        warnings.append("未配置 DASHSCOPE_API_KEY，仅删除本地音色记录。")
+
+    if matched:
+        _write_profiles(settings.output_dir, remaining)
+    else:
+        warnings.append("本地未找到该音色记录。")
+    return DeleteVoiceResponse(deleted=matched, voice_id=delete_voice_id, warnings=warnings)
 
 
 def _voice_design_payload(request: CreateVoiceRequest, settings: Settings, prompt: str) -> dict:

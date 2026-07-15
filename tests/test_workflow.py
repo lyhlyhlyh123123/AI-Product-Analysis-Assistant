@@ -12,7 +12,6 @@ from app.workflows.product_graph import run_analyze_product, run_extract_product
 def use_temp_settings(monkeypatch, tmp_path):
     settings = Settings(output_dir=tmp_path)
     monkeypatch.setattr("app.services.ai.Settings.from_env", lambda: settings)
-    monkeypatch.setattr("app.services.media.Settings.from_env", lambda: settings)
     monkeypatch.setattr("app.services.storage.Settings.from_env", lambda: settings)
     return settings
 

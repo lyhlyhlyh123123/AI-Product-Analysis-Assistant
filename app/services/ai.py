@@ -78,14 +78,14 @@ def generate_short_video_script(task_id: str, product: ProductInfo, analysis: An
     warnings = list(warnings or [])
     if settings.has_deepseek:
         try:
-            script, image_prompt, _ = _generate_script_with_deepseek(product, analysis, settings)
-            return GenerateScriptResponse(task_id=task_id, product=product, analysis=analysis, short_video_script=script, image_prompt=image_prompt, tts_text=_speech_text_for_script(script), warnings=warnings)
+            script = _generate_script_with_deepseek(product, analysis, settings)
+            return GenerateScriptResponse(task_id=task_id, product=product, analysis=analysis, short_video_script=script, tts_text=_speech_text_for_script(script), warnings=warnings)
         except Exception as exc:  # noqa: BLE001
             warnings.append(f"DeepSeek 口播文案失败，已使用本地兜底文案：{exc}")
     else:
         warnings.append("未配置 DEEPSEEK_API_KEY，已使用本地兜底口播文案。")
     script = _fallback_script_for_product(product, analysis)
-    return GenerateScriptResponse(task_id=task_id, product=product, analysis=analysis, short_video_script=script, image_prompt=_image_prompt_for_product(product), tts_text=_speech_text_for_script(script), warnings=warnings)
+    return GenerateScriptResponse(task_id=task_id, product=product, analysis=analysis, short_video_script=script, tts_text=_speech_text_for_script(script), warnings=warnings)
 
 
 def generate_analysis(evidence: ProductEvidence, settings: Settings | None = None) -> AnalyzeResponse:
@@ -119,13 +119,11 @@ def build_fallback_analysis(evidence: ProductEvidence) -> AnalyzeResponse:
     hook = f"别急着下单，先看{name}最值得关注的一点。"
     feature_text = "、".join(features[:2])
     script = enforce_script_limit(f"它的重点是{feature_text}，适合想少踩坑、快速判断值不值得买的人。用真实场景讲清痛点，再把核心卖点放大，转化会更自然。")
-    image_prompt = f"Vertical product short video cover for {name}, clean ecommerce style, highlight practical selling points"
     return AnalyzeResponse(
         task_id=str(uuid.uuid4()),
         product=product,
         analysis=analysis,
         short_video_script=ShortVideoScript(hook=hook, script=script, word_count=len(script)),
-        image_prompt=image_prompt,
         tts_text=script,
         warnings=list(evidence.warnings),
     )
@@ -274,13 +272,13 @@ def _generate_stage_analysis_with_deepseek(product: ProductInfo, visible_text: s
     return AnalysisResult.model_validate(_normalize_analysis_data(data.get("analysis", data)))
 
 
-def _generate_script_with_deepseek(product: ProductInfo, analysis: AnalysisResult, settings: Settings) -> tuple[ShortVideoScript, str, str]:
+def _generate_script_with_deepseek(product: ProductInfo, analysis: AnalysisResult, settings: Settings) -> ShortVideoScript:
     data = _deepseek_json(
         settings,
         "你是中文带货短视频编导。只输出 JSON 对象，不要 Markdown。",
         {
             "task": "基于商品信息和产品分析生成短视频口播文案。不要写成商品说明书，要像短视频博主真实口播。脚本必须150字以内，前5秒有吸引继续观看的钩子，必须体现谁会喜欢、关键卖点和具体使用场景，避免空泛词，不要出现不适合、跳过、劝退等负向推荐表达。语句、语义、语法必须清晰，没有明显错误。",
-            "schema": {"hook": "反差/问题/场景式开头钩子", "script": "150字以内中文口播：谁会喜欢 + 关键卖点 + 使用场景 + 推荐理由", "image_prompt": "竖屏封面提示词", "tts_text": "TTS文本"},
+            "schema": {"hook": "反差/问题/场景式开头钩子", "script": "150字以内中文口播：谁会喜欢 + 关键卖点 + 使用场景 + 推荐理由", "tts_text": "TTS文本"},
             "product": product.model_dump(),
             "analysis": analysis.model_dump(),
         },
@@ -290,9 +288,7 @@ def _generate_script_with_deepseek(product: ProductInfo, analysis: AnalysisResul
     if not script_text:
         raise ValueError("AI 未返回口播文案")
     script = ShortVideoScript(hook=hook, script=script_text, word_count=len(script_text))
-    image_prompt = str(data.get("image_prompt") or _image_prompt_for_product(product))
-    tts_text = _speech_text_for_script(script)
-    return script, image_prompt, tts_text
+    return script
 
 
 def _deepseek_json(settings: Settings, system_prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -352,8 +348,8 @@ def _generate_with_deepseek(evidence: ProductEvidence, settings: Settings) -> An
 
 def _prompt_payload(evidence: ProductEvidence) -> dict[str, Any]:
     return {
-        "task": "基于商品证据生成产品信息整理、产品分析、150字以内中文短视频口播文案、TTS文本和图片提示词。",
-        "required_json_keys": ["product", "analysis", "short_video_script", "image_prompt", "tts_text", "warnings"],
+        "task": "基于商品证据生成产品信息整理、产品分析、150字以内中文口播文案和TTS文本。",
+        "required_json_keys": ["product", "analysis", "short_video_script", "tts_text", "warnings"],
         "product_evidence": evidence.product.model_dump(),
         "visible_text": evidence.visible_text[:5000],
         "warnings": evidence.warnings,
@@ -372,7 +368,6 @@ def _response_from_ai_data(data: dict[str, Any], evidence: ProductEvidence) -> A
             product=product,
             analysis=analysis,
             short_video_script=script,
-            image_prompt=str(data.get("image_prompt", "")),
             tts_text=_speech_text_for_script(script),
             warnings=warnings,
         )
@@ -475,10 +470,6 @@ def _fallback_script_for_product(product: ProductInfo, analysis: AnalysisResult)
     script = enforce_script_limit(f"如果你关注{selling_points[0]}，可以先看它放进真实场景里的效果。它的关键点是{'、'.join(selling_points)}。{content_angle}适合想快速判断亮点和使用感的人参考。")
     return ShortVideoScript(hook=hook, script=script, word_count=len(script))
 
-
-def _image_prompt_for_product(product: ProductInfo) -> str:
-    name = product.title.value if product.title.value != "unknown" else "Amazon product"
-    return f"Vertical ecommerce short video cover for {name}, clean product layout, highlight practical selling points"
 
 
 def _normalize_product_data(data: Any) -> dict[str, Any]:

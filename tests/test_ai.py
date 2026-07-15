@@ -126,7 +126,6 @@ def test_script_prompt_requires_clear_semantics_grammar_and_no_obvious_errors(mo
         captured["payload"] = payload
         return {
             "short_video_script": {"hook": "先看这点", "script": "这款商品适合日常使用。", "word_count": 12},
-            "image_prompt": "",
             "tts_text": "先看这点\n这款商品适合日常使用。",
         }
 
@@ -254,7 +253,6 @@ def test_ai_response_accepts_scalar_product_fields():
             "product": {"title": "Portable Blender", "category": "Kitchen", "price": "unknown", "rating": 4.2, "review_count": 462},
             "analysis": {"target_users": ["旅行用户"]},
             "short_video_script": {"hook": "先看这一点", "script": "先看这一点，这款便携榨汁杯适合通勤和旅行。", "word_count": 24},
-            "image_prompt": "product cover",
             "tts_text": "先看这一点，这款便携榨汁杯适合通勤和旅行。",
         },
         evidence,

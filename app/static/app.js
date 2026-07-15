@@ -2,12 +2,14 @@ const form = document.querySelector('#extract-form');
 const statusEl = document.querySelector('#status');
 const analysisButton = document.querySelector('#analysis-button');
 const scriptButton = document.querySelector('#script-button');
-const videoButton = document.querySelector('#video-button');
+const voiceButton = document.querySelector('#voice-button');
 const pageTitle = document.querySelector('#page-title');
 const navItems = [...document.querySelectorAll('.nav-item')];
 const recordsList = document.querySelector('#records-list');
 const refreshRecordsButton = document.querySelector('#refresh-records');
 const createVoiceButton = document.querySelector('#create-voice-button');
+const deleteVoiceButton = document.querySelector('#delete-voice-button');
+const saveScriptButton = document.querySelector('#save-script-button');
 const inputMethodSelect = document.querySelector('#input-method');
 const urlField = document.querySelector('#url-field');
 const manualField = document.querySelector('#manual-field');
@@ -15,7 +17,7 @@ let stageState = {
   product: null,
   analysis: null,
   script: null,
-  video: null,
+  voice: null,
 };
 
 const labels = {
@@ -35,6 +37,8 @@ loadRecordsList();
 loadVoices();
 refreshRecordsButton.addEventListener('click', loadRecordsList);
 createVoiceButton.addEventListener('click', createVoiceProfile);
+deleteVoiceButton.addEventListener('click', deleteSelectedVoiceProfile);
+saveScriptButton.addEventListener('click', saveEditedScript);
 inputMethodSelect.addEventListener('change', updateInputMethodFields);
 document.querySelector('#voice-select').addEventListener('change', updateVoiceGenerationAvailability);
 updateInputMethodFields();
@@ -53,7 +57,7 @@ form.addEventListener('submit', async (event) => {
       payload.manual_text = null;
     }
     const data = await postJson('/api/extract-product', payload);
-    stageState = { product: data, analysis: null, script: null, video: null };
+    stageState = { product: data, analysis: null, script: null, voice: null };
     renderProduct(data);
     renderWarnings(data.warnings || []);
     loadRecordsList();
@@ -123,7 +127,7 @@ scriptButton.addEventListener('click', async () => {
   }
 });
 
-videoButton.addEventListener('click', async () => {
+voiceButton.addEventListener('click', async () => {
   if (!stageState.script) return;
   const selectedVoiceId = document.querySelector('#voice-select').value;
   if (!selectedVoiceId) {
@@ -131,9 +135,10 @@ videoButton.addEventListener('click', async () => {
     updateVoiceGenerationAvailability();
     return;
   }
-  setStatus('生成口播语音中...');
-  videoButton.disabled = true;
+  setStatus('保存口播文案并生成口播语音中...');
+  voiceButton.disabled = true;
   try {
+    await persistEditedScript({ refreshRecords: false });
     const text = speechTextForScript(stageState.script);
     const data = await postJson('/api/generate-voice', {
       task_id: stageState.script.task_id,
@@ -144,7 +149,7 @@ videoButton.addEventListener('click', async () => {
       audio_format: document.querySelector('#voice-format').value || 'wav',
       sample_rate: Number(document.querySelector('#sample-rate').value || 24000),
     });
-    stageState.video = data;
+    stageState.voice = data;
     renderVoice(data);
     renderWarnings([...(stageState.script.warnings || []), ...(data.warnings || [])]);
     loadRecordsList();
@@ -169,13 +174,48 @@ function updateInputMethodFields() {
 }
 
 async function postJson(url, payload) {
+  return sendJson(url, 'POST', payload);
+}
+
+async function patchJson(url, payload) {
+  return sendJson(url, 'PATCH', payload);
+}
+
+async function sendJson(url, method, payload) {
   const response = await fetch(url, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
+}
+
+async function saveEditedScript() {
+  if (!stageState.script) return;
+  saveScriptButton.disabled = true;
+  try {
+    await persistEditedScript({ showStatus: true });
+    setStatus('口播文案已保存');
+  } catch (error) {
+    setStatus(`口播文案保存失败：${error.message}`);
+  } finally {
+    saveScriptButton.disabled = false;
+  }
+}
+
+async function persistEditedScript({ refreshRecords = true, showStatus = false } = {}) {
+  const hook = fieldValue('#script-hook');
+  const script = fieldValue('#script-body');
+  if (!hook && !script) throw new Error('口播文案不能为空');
+  if (showStatus) setStatus('保存口播文案中...');
+  const data = await patchJson(`/api/results/${encodeURIComponent(stageState.script.task_id)}/script`, { hook, script });
+  stageState.script = data;
+  renderScript(data);
+  renderWarnings(data.warnings || []);
+  if (refreshRecords) await loadRecordsList();
+  updateVoiceGenerationAvailability();
+  return data;
 }
 
 async function loadVoices() {
@@ -202,13 +242,14 @@ function renderVoiceOptions(voices) {
 
 function updateVoiceGenerationAvailability() {
   const selectedVoiceId = document.querySelector('#voice-select').value;
-  videoButton.disabled = !stageState.script || !selectedVoiceId;
+  voiceButton.disabled = !stageState.script || !selectedVoiceId;
 }
 
 function speechTextForScript(scriptResponse) {
-  const script = scriptResponse?.short_video_script || {};
-  const hook = String(scriptResponse?.short_video_script?.hook || '').trim();
-  const body = String(scriptResponse?.short_video_script?.script || '').trim();
+  const hookField = document.querySelector('#script-hook');
+  const bodyField = document.querySelector('#script-body');
+  const hook = String(hookField ? hookField.value : scriptResponse?.short_video_script?.hook || '').trim();
+  const body = String(bodyField ? bodyField.value : scriptResponse?.short_video_script?.script || '').trim();
   return [hook, body].filter(Boolean).join('\n');
 }
 
@@ -235,6 +276,32 @@ async function createVoiceProfile() {
     setStatus(`音色创建失败：${error.message}`);
   } finally {
     createVoiceButton.disabled = false;
+  }
+}
+
+async function deleteSelectedVoiceProfile() {
+  const select = document.querySelector('#voice-select');
+  const voiceId = select.value;
+  if (!voiceId) {
+    setStatus('请先选择要删除的音色');
+    return;
+  }
+  if (!window.confirm(`确定删除音色 ${voiceId}？`)) return;
+  setStatus('删除音色中...');
+  deleteVoiceButton.disabled = true;
+  try {
+    const response = await fetch(`/api/voices/${encodeURIComponent(voiceId)}`, { method: 'DELETE' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || JSON.stringify(data));
+    await loadVoices();
+    select.value = '';
+    updateVoiceGenerationAvailability();
+    renderWarnings(data.warnings || []);
+    setStatus(data.deleted ? '音色已删除' : data.warnings?.join('；') || '音色删除完成');
+  } catch (error) {
+    setStatus(`音色删除失败：${error.message}`);
+  } finally {
+    deleteVoiceButton.disabled = false;
   }
 }
 
@@ -319,13 +386,13 @@ function renderAnalysisLogic(rows) {
 }
 
 function renderScript(data) {
-  setText('#script-hook', data.short_video_script?.hook || '');
-  setText('#script-body', data.short_video_script?.script || '');
+  setFieldValue('#script-hook', data.short_video_script?.hook || '');
+  setFieldValue('#script-body', data.short_video_script?.script || '');
   renderQa('#analysis-qa', data.analysis_qa);
 }
 
 function renderVoice(data) {
-  const panel = document.querySelector('#video-panel');
+  const panel = document.querySelector('#voice-panel');
   const empty = document.querySelector('#asset-empty');
   const audio = document.querySelector('#voice-audio');
   const links = document.querySelector('#download-links');
@@ -375,17 +442,20 @@ function hydrateSavedRecord(record) {
   }
   const voiceResponse = voiceResponseForRecord(record);
   if (voiceResponse) {
-    stageState.video = voiceResponse;
-    renderVoice(stageState.video);
+    stageState.voice = voiceResponse;
+    renderVoice(stageState.voice);
   }
   if (record.analysis_response && !stageState.product) {
     const legacy = record.analysis_response;
     stageState.product = { task_id: legacy.task_id, source_url: record.source_url, product: legacy.product, visible_text: '', warnings: legacy.warnings || [] };
     stageState.analysis = { task_id: legacy.task_id, product: legacy.product, analysis: legacy.analysis, warnings: legacy.warnings || [] };
-    stageState.script = legacy;
     renderProduct(stageState.product);
     renderAnalysis(stageState.analysis);
-    renderScript(stageState.script);
+    if (!stageState.script) {
+      stageState.script = legacy;
+      renderScript(stageState.script);
+      updateVoiceGenerationAvailability();
+    }
   }
 }
 
@@ -458,19 +528,19 @@ async function toggleRecordDetail(taskId) {
 function voiceResponseForRecord(record) {
   const voice = record.voice_response || {};
   if (voice.audio_url || voice.remote_audio_url) return voice;
-  const legacy = record.video_response || {};
-  if (legacy.audio_url) return legacy;
+  const legacyVoice = record.video_response || {};
+  if (legacyVoice.audio_url || legacyVoice.remote_audio_url) return legacyVoice;
   return null;
 }
 
 function pageForHydratedRecord(record) {
-  if (record.voice_response || record.video_response || record.script_response || record.analysis_response?.short_video_script) return 'script-page';
+  if (voiceResponseForRecord(record) || record.script_response || record.analysis_response?.short_video_script) return 'script-page';
   if (record.stage_analysis_response || record.analysis_response) return 'analysis-page';
   if (record.product_response) return 'product-page';
   return 'product-page';
 }
 
-function speechTextForShortVideoScript(script) {
+function speechTextForOralScript(script) {
   return [script.hook, script.script].map((part) => String(part || '').trim()).filter(Boolean).join('\n');
 }
 
@@ -482,7 +552,7 @@ function renderRecordDetail(root, record) {
   root.innerHTML = `
     <section><h3>产品信息</h3><p>${escapeHtml(product.title?.value || product.title || 'unknown')}</p></section>
     <section><h3>产品分析</h3><p>${escapeHtml(firstText(analysis.selling_points) || firstText(analysis.content_angles) || '暂无')}</p></section>
-    <section><h3>口播文案</h3><p>${escapeHtml(speechTextForShortVideoScript(script) || '暂无')}</p></section>
+    <section><h3>口播文案</h3><p>${escapeHtml(speechTextForOralScript(script) || '暂无')}</p></section>
     <section><h3>口播语音</h3><div class="history-links">${artifactLink(voice.audio_url, '音频')}${artifactLink(voice.remote_audio_url, '临时音频')}</div></section>
   `;
 }
@@ -530,17 +600,20 @@ function resetWorkspace() {
 }
 
 function clearWorkspaceData() {
-  stageState = { product: null, analysis: null, script: null, video: null };
+  stageState = { product: null, analysis: null, script: null, voice: null };
   const productImage = document.querySelector('#product-image');
   productImage.classList.add('hidden');
   productImage.removeAttribute('src');
-  ['#scrape-method', '#product-title', '#product-category', '#product-price', '#product-rating', '#product-reviews', '#localized-title', '#localized-category', '#localized-price', '#localized-rating', '#localized-reviews', '#localized-summary', '#script-hook', '#script-body'].forEach((selector) => {
+  ['#scrape-method', '#product-title', '#product-category', '#product-price', '#product-rating', '#product-reviews', '#localized-title', '#localized-category', '#localized-price', '#localized-rating', '#localized-reviews', '#localized-summary'].forEach((selector) => {
     document.querySelector(selector).textContent = '';
+  });
+  ['#script-hook', '#script-body'].forEach((selector) => {
+    setFieldValue(selector, '');
   });
   ['#product-features', '#localized-features', '#product-specs', '#localized-specs', '#analysis-logic', '#analysis-sections', '#download-links'].forEach((selector) => {
     document.querySelector(selector).innerHTML = '';
   });
-  document.querySelector('#video-panel').classList.add('hidden');
+  document.querySelector('#voice-panel').classList.add('hidden');
   document.querySelector('#asset-empty').classList.remove('hidden');
   document.querySelector('#voice-audio').classList.add('hidden');
   document.querySelector('#voice-audio').removeAttribute('src');
@@ -638,6 +711,15 @@ function formatExtractionMethod(method) {
 
 function setText(selector, text) {
   document.querySelector(selector).textContent = text || 'unknown';
+}
+
+function fieldValue(selector) {
+  return String(document.querySelector(selector)?.value || '').trim();
+}
+
+function setFieldValue(selector, text) {
+  const field = document.querySelector(selector);
+  if (field) field.value = text || '';
 }
 
 function setStatus(text) {

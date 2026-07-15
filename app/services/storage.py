@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from app.config import Settings
-from app.models import AnalyzeResponse, ExtractProductResponse, GenerateAnalysisResponse, GenerateScriptResponse, GenerateVideoResponse, GenerateVoiceResponse, QAResult
+from app.models import AnalyzeResponse, ExtractProductResponse, GenerateAnalysisResponse, GenerateScriptResponse, GenerateVoiceResponse, QAResult, ShortVideoScript
 
-# Importers/callers: app.main will call save_analysis_result, update_video_result, and load_result_record from API routes.
-# Affected API: POST /api/analyze and POST /api/generate-video gain persistence side effects; GET /api/results/{task_id} will read saved records.
-# Data schemas: no existing Pydantic request/response schema is changed; saved JSON records include task_id, source_url, timestamps, analysis_response, and video_response.
+# Importers/callers: app.main and product_graph persist product, analysis, script, and voice results.
+# Affected API: GET /api/results/{task_id} reads saved records; staged routes update the same record by task_id.
+# Data schemas: saved JSON records include task_id, source_url, timestamps, product, analysis, script, and voice responses.
 # User instruction: "一个链接生成的产物要能够保存，能明白吗"
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 
@@ -47,6 +47,25 @@ def save_script_result(response: GenerateScriptResponse, settings: Settings | No
     return _update_record(response.task_id, settings, **updates)
 
 
+def update_script_text(task_id: str, hook: str, script: str, settings: Settings | None = None) -> GenerateScriptResponse:
+    settings = settings or Settings.from_env()
+    record = load_result_record(task_id, settings.output_dir)
+    if record is None:
+        raise ValueError("口播文案记录不存在")
+    script_record = record.get("script_response") or record.get("analysis_response")
+    if not script_record:
+        raise ValueError("口播文案记录不存在")
+    response = GenerateScriptResponse.model_validate(script_record)
+    clean_hook = hook.strip()
+    clean_script = script.strip()
+    if not clean_hook and not clean_script:
+        raise ValueError("口播文案不能为空")
+    response.short_video_script = ShortVideoScript(hook=clean_hook, script=clean_script, word_count=len(clean_script))
+    response.tts_text = "\n".join(part for part in (clean_hook, clean_script) if part)
+    save_script_result(response, settings)
+    return response
+
+
 def update_voice_result(task_id: str, response: GenerateVoiceResponse, settings: Settings | None = None) -> dict[str, Any]:
     return _update_record(task_id, settings, voice_response=response.model_dump(mode="json"))
 
@@ -59,9 +78,6 @@ def save_analysis_result(url: str, response: AnalyzeResponse, settings: Settings
         analysis_response=response.model_dump(mode="json"),
     )
 
-
-def update_video_result(task_id: str, response: GenerateVideoResponse, settings: Settings | None = None) -> dict[str, Any]:
-    return _update_record(task_id, settings, video_response=response.model_dump(mode="json"))
 
 
 def load_result_record(task_id: str, output_dir: Path | None = None) -> dict[str, Any] | None:
@@ -114,8 +130,7 @@ def _record_summary(record: dict[str, Any]) -> dict[str, Any]:
     if not title and isinstance(legacy_product, dict):
         legacy_title = legacy_product.get("title") or {}
         title = legacy_title.get("value", "") if isinstance(legacy_title, dict) else str(legacy_title)
-    video_response = record.get("video_response") or {}
-    voice_response = record.get("voice_response") or {}
+    voice_response = record.get("voice_response") or record.get("video_response") or {}
     product_qa = record.get("product_qa_response") or {}
     analysis_qa = record.get("analysis_qa_response") or {}
     return {
@@ -127,11 +142,10 @@ def _record_summary(record: dict[str, Any]) -> dict[str, Any]:
         "has_product": bool(record.get("product_response") or record.get("analysis_response")),
         "has_analysis": bool(record.get("stage_analysis_response") or record.get("analysis_response")),
         "has_script": bool(record.get("script_response") or record.get("analysis_response")),
-        "has_video": bool(video_response.get("video_url")),
-        "has_voice": bool(voice_response.get("audio_url") or video_response.get("audio_url")),
+        "has_voice": bool(voice_response.get("audio_url")),
         "product_qa_status": product_qa.get("status", ""),
         "analysis_qa_status": analysis_qa.get("status", ""),
-        "has_assets": bool(voice_response.get("audio_url") or video_response.get("image_url") or video_response.get("audio_url") or video_response.get("video_url")),
+        "has_voice_audio": bool(voice_response.get("audio_url")),
     }
 
 
@@ -151,7 +165,6 @@ def _update_record(task_id: str, settings: Settings | None = None, **updates: An
             "analysis_qa_response": None,
             "script_response": None,
             "analysis_response": None,
-            "video_response": None,
             "voice_response": None,
         }
     record.update({key: value for key, value in updates.items() if value is not None})

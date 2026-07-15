@@ -6,12 +6,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.models import AnalyzeRequest, AnalyzeResponse, CreateVoiceRequest, CreateVoiceResponse, ExtractProductRequest, ExtractProductResponse, GenerateAnalysisRequest, GenerateAnalysisResponse, GenerateScriptRequest, GenerateScriptResponse, GenerateVideoRequest, GenerateVideoResponse, GenerateVoiceRequest, GenerateVoiceResponse, VoiceProfile
+from app.models import AnalyzeRequest, AnalyzeResponse, CreateVoiceRequest, CreateVoiceResponse, DeleteVoiceResponse, ExtractProductRequest, ExtractProductResponse, GenerateAnalysisRequest, GenerateAnalysisResponse, GenerateScriptRequest, GenerateScriptResponse, GenerateVoiceRequest, GenerateVoiceResponse, UpdateScriptRequest, VoiceProfile
 from app.services.ai import generate_analysis
 from app.services.scraper import fetch_product_evidence
-from app.services.storage import delete_result_record, list_result_records, load_result_record, save_analysis_result
-from app.services.voices import create_voice_profile, list_voice_profiles
-from app.workflows.product_graph import run_analyze_product, run_extract_product, run_generate_script, run_generate_video, run_generate_voice
+from app.services.storage import delete_result_record, list_result_records, load_result_record, save_analysis_result, update_script_text
+from app.services.voices import create_voice_profile, delete_voice_profile, list_voice_profiles
+from app.workflows.product_graph import run_analyze_product, run_extract_product, run_generate_script, run_generate_voice
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -78,6 +78,11 @@ def create_voice(request: CreateVoiceRequest) -> CreateVoiceResponse:
     return create_voice_profile(request)
 
 
+@app.delete("/api/voices/{voice_id}", response_model=DeleteVoiceResponse)
+def delete_voice(voice_id: str) -> DeleteVoiceResponse:
+    return delete_voice_profile(voice_id)
+
+
 @app.get("/api/results/{task_id}")
 def get_saved_result(task_id: str) -> dict:
     record = load_result_record(task_id)
@@ -86,16 +91,16 @@ def get_saved_result(task_id: str) -> dict:
     return record
 
 
+@app.patch("/api/results/{task_id}/script", response_model=GenerateScriptResponse)
+def update_saved_script(task_id: str, request: UpdateScriptRequest) -> GenerateScriptResponse:
+    return update_script_text(task_id, request.hook, request.script)
+
+
 @app.delete("/api/results/{task_id}")
 def delete_saved_result(task_id: str) -> dict:
     if not delete_result_record(task_id):
         raise HTTPException(status_code=404, detail="保存记录不存在")
     return {"deleted": True, "task_id": task_id}
-
-
-@app.post("/api/generate-video", response_model=GenerateVideoResponse)
-def generate_video(request: GenerateVideoRequest) -> GenerateVideoResponse:
-    return run_generate_video(request)
 
 
 @app.post("/api/generate-voice", response_model=GenerateVoiceResponse)

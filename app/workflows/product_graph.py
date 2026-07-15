@@ -5,17 +5,16 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app.models import ExtractProductRequest, ExtractProductResponse, GenerateAnalysisRequest, GenerateAnalysisResponse, GenerateScriptRequest, GenerateScriptResponse, GenerateVideoRequest, GenerateVideoResponse, GenerateVoiceRequest, GenerateVoiceResponse, LocalizedProductInfo, QAResult
+from app.models import ExtractProductRequest, ExtractProductResponse, GenerateAnalysisRequest, GenerateAnalysisResponse, GenerateScriptRequest, GenerateScriptResponse, GenerateVoiceRequest, GenerateVoiceResponse, LocalizedProductInfo, QAResult
 from app.services.ai import generate_product_analysis, generate_short_video_script, localize_product_info
-from app.services.media import generate_video_assets
 from app.services.qa import qa_analysis, qa_product_info
 from app.services.scraper import fetch_product_evidence
-from app.services.storage import save_analysis_qa_result, save_product_qa_result, save_product_result, save_script_result, save_stage_analysis_result, update_video_result, update_voice_result
+from app.services.storage import save_analysis_qa_result, save_product_qa_result, save_product_result, save_script_result, save_stage_analysis_result, update_voice_result
 from app.services.voice import generate_voice_audio
 
-# Importers/callers: app.main staged API routes call run_extract_product, run_analyze_product, run_generate_script, and run_generate_video.
+# Importers/callers: app.main staged API routes call run_extract_product, run_analyze_product, run_generate_script, and run_generate_voice.
 # Affected API: route names and Pydantic response contracts stay the same; implementation delegates each stage to a LangGraph node.
-# Data schemas: uses existing ExtractProduct/GenerateAnalysis/GenerateScript/GenerateVideo schemas; no persisted record shape changes.
+# Data schemas: uses existing ExtractProduct/GenerateAnalysis/GenerateScript/GenerateVoice schemas; no persisted record shape changes.
 # User instruction: "可以的进行优化吧"
 
 
@@ -23,14 +22,12 @@ class ProductWorkflowState(TypedDict, total=False):
     extract_request: ExtractProductRequest
     analysis_request: GenerateAnalysisRequest
     script_request: GenerateScriptRequest
-    video_request: GenerateVideoRequest
     voice_request: GenerateVoiceRequest
     product_response: ExtractProductResponse
     product_qa_response: QAResult
     analysis_response: GenerateAnalysisResponse
     analysis_qa_response: QAResult
     script_response: GenerateScriptResponse
-    video_response: GenerateVideoResponse
     voice_response: GenerateVoiceResponse
 
 
@@ -48,10 +45,6 @@ def run_generate_script(request: GenerateScriptRequest) -> GenerateScriptRespons
     result = _script_graph().invoke({"script_request": request})
     return result["script_response"]
 
-
-def run_generate_video(request: GenerateVideoRequest) -> GenerateVideoResponse:
-    result = _video_graph().invoke({"video_request": request})
-    return result["video_response"]
 
 
 def run_generate_voice(request: GenerateVoiceRequest) -> GenerateVoiceResponse:
@@ -89,16 +82,6 @@ def _script_node(state: ProductWorkflowState) -> ProductWorkflowState:
     save_script_result(response)
     return {"script_response": response, "analysis_qa_response": analysis_qa}
 
-
-def _video_node(state: ProductWorkflowState) -> ProductWorkflowState:
-    request = state["video_request"]
-    video_request = GenerateVideoRequest.model_validate(request.model_dump(mode="json"))
-    try:
-        response = generate_video_assets(video_request)
-    except Exception as exc:  # noqa: BLE001
-        response = GenerateVideoResponse(warnings=[f"视频生成失败：{exc}"])
-    update_video_result(request.task_id, response)
-    return {"video_response": response}
 
 
 def _voice_node(state: ProductWorkflowState) -> ProductWorkflowState:
@@ -176,13 +159,6 @@ def _script_graph():
     graph.add_edge("generate_script", END)
     return graph.compile()
 
-
-def _video_graph():
-    graph = StateGraph(ProductWorkflowState)
-    graph.add_node("generate_video", _video_node)
-    graph.set_entry_point("generate_video")
-    graph.add_edge("generate_video", END)
-    return graph.compile()
 
 
 def _voice_graph():

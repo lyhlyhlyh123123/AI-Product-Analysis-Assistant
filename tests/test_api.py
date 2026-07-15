@@ -11,7 +11,6 @@ client = TestClient(app)
 def use_temp_settings(monkeypatch, tmp_path):
     settings = Settings(output_dir=tmp_path)
     monkeypatch.setattr("app.services.ai.Settings.from_env", lambda: settings)
-    monkeypatch.setattr("app.services.media.Settings.from_env", lambda: settings)
     monkeypatch.setattr("app.services.storage.Settings.from_env", lambda: settings)
     monkeypatch.setattr("app.services.voice.Settings.from_env", lambda: settings)
     monkeypatch.setattr("app.services.voices.Settings.from_env", lambda: settings)
@@ -36,28 +35,11 @@ def test_analyze_accepts_manual_text_without_network(monkeypatch, tmp_path):
     record = storage.load_result_record(data["task_id"], settings.output_dir)
     assert record["source_url"] == "manual://input"
     assert record["analysis_response"]["task_id"] == data["task_id"]
-    assert record["video_response"] is None
 
     saved_response = client.get(f"/api/results/{data['task_id']}")
     assert saved_response.status_code == 200
     assert saved_response.json()["analysis_response"]["product"]["title"]["value"]
 
-
-def test_generate_video_updates_saved_record(monkeypatch, tmp_path):
-    settings = use_temp_settings(monkeypatch, tmp_path)
-    analyze_response = client.post(
-        "/api/analyze",
-        json={"input_method": "manual", "manual_text": "Portable Blender USB rechargeable 500ml"},
-    )
-    data = analyze_response.json()
-
-    response = client.post("/api/generate-video", json=data)
-
-    assert response.status_code == 200
-    video_data = response.json()
-    assert video_data["warnings"]
-    record = storage.load_result_record(data["task_id"], settings.output_dir)
-    assert record["video_response"]["image_url"].endswith(".png")
 
 
 def test_staged_workflow_saves_each_result(monkeypatch, tmp_path):
@@ -109,46 +91,44 @@ def test_staged_workflow_saves_each_result(monkeypatch, tmp_path):
     assert client.get(f"/api/results/{product_data['task_id']}").status_code == 404
 
 
-def test_voice_profile_api_creates_and_lists_profiles(monkeypatch, tmp_path):
+def test_voice_profile_api_creates_lists_and_deletes_profiles(monkeypatch, tmp_path):
     settings = Settings(output_dir=tmp_path, dashscope_api_key="dashscope-key")
     monkeypatch.setattr("app.services.voices.Settings.from_env", lambda: settings)
+    calls = []
 
     class DummyResponse:
         status_code = 200
         text = "ok"
 
+        def __init__(self, payload):
+            self.payload = payload
+
         def json(self):
+            if self.payload["input"]["action"] == "delete":
+                return {"output": {"voice": self.payload["input"]["voice"]}}
             return {"output": {"voice": "api_voice_id"}}
 
-    monkeypatch.setattr("app.services.voices.httpx.post", lambda *args, **kwargs: DummyResponse())
+    def fake_post(url, json, headers, timeout):
+        calls.append(json)
+        return DummyResponse(json)
+
+    monkeypatch.setattr("app.services.voices.httpx.post", fake_post)
 
     create_response = client.post("/api/voices", json={"name": "活泼女声", "prompt": "年轻活泼的女性声音，语速偏快"})
     list_response = client.get("/api/voices")
+    delete_response = client.delete("/api/voices/api_voice_id")
+    list_after_delete = client.get("/api/voices")
 
     assert create_response.status_code == 200
     assert create_response.json()["profile"]["voice_id"] == "api_voice_id"
     assert list_response.status_code == 200
     assert list_response.json()[0]["voice_id"] == "api_voice_id"
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    assert list_after_delete.json() == []
+    assert calls[-1]["model"] == "qwen-voice-design"
+    assert calls[-1]["input"] == {"action": "delete", "voice": "api_voice_id"}
 
-
-def test_generate_video_returns_warning_when_tts_unconfigured(monkeypatch, tmp_path):
-    use_temp_settings(monkeypatch, tmp_path)
-    response = client.post(
-        "/api/generate-video",
-        json={"task_id": "abc", "product": {}, "analysis": {}, "short_video_script": {"script": "测试文案"}},
-    )
-    assert response.status_code == 200
-    assert response.json()["warnings"]
-
-
-def test_record_summary_treats_legacy_video_audio_as_voice(monkeypatch, tmp_path):
-    settings = use_temp_settings(monkeypatch, tmp_path)
-    storage._update_record("legacy-audio", settings, source_url="https://www.amazon.com/dp/B0TEST1234", video_response={"audio_url": "/static/outputs/legacy-audio.mp3"})
-
-    records = storage.list_result_records(settings.output_dir)
-
-    legacy = next(item for item in records if item["task_id"] == "legacy-audio")
-    assert legacy["has_voice"] is True
 
 
 def test_saved_result_rejects_invalid_task_id():

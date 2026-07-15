@@ -131,13 +131,17 @@ class GenerateScriptRequest(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class UpdateScriptRequest(BaseModel):
+    hook: str = ""
+    script: str = ""
+
+
 class GenerateScriptResponse(BaseModel):
     task_id: str
     product: ProductInfo = Field(default_factory=ProductInfo)
     analysis: AnalysisResult = Field(default_factory=AnalysisResult)
     analysis_qa: QAResult | None = None
     short_video_script: ShortVideoScript = Field(default_factory=ShortVideoScript)
-    image_prompt: str = ""
     tts_text: str = ""
     warnings: list[str] = Field(default_factory=list)
 
@@ -151,25 +155,9 @@ class AnalyzeResponse(BaseModel):
     product: ProductInfo = Field(default_factory=ProductInfo)
     analysis: AnalysisResult = Field(default_factory=AnalysisResult)
     short_video_script: ShortVideoScript = Field(default_factory=ShortVideoScript)
-    image_prompt: str = ""
     tts_text: str = ""
     warnings: list[str] = Field(default_factory=list)
 
-
-class GenerateVideoRequest(BaseModel):
-    task_id: str
-    product: dict[str, Any] = Field(default_factory=dict)
-    analysis: dict[str, Any] = Field(default_factory=dict)
-    short_video_script: dict[str, Any] = Field(default_factory=dict)
-    image_prompt: str = ""
-    tts_text: str = ""
-
-
-class GenerateVideoResponse(BaseModel):
-    video_url: str = ""
-    audio_url: str = ""
-    image_url: str = ""
-    warnings: list[str] = Field(default_factory=list)
 
 
 class VoiceProfile(BaseModel):
@@ -190,6 +178,12 @@ class CreateVoiceRequest(BaseModel):
 
 class CreateVoiceResponse(BaseModel):
     profile: VoiceProfile | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DeleteVoiceResponse(BaseModel):
+    deleted: bool = False
+    voice_id: str = ""
     warnings: list[str] = Field(default_factory=list)
 
 

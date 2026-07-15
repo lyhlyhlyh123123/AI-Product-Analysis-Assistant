@@ -68,7 +68,9 @@ def test_frontend_inlines_voice_controls_on_script_page():
     assert 'id="sample-rate"' in script_page
     assert 'id="voice-select"' in script_page
     assert 'id="create-voice-button"' in script_page
-    assert 'id="video-panel"' in script_page
+    assert 'id="delete-voice-button"' in script_page
+    assert 'id="voice-panel"' in script_page
+    assert 'id="video-panel"' not in script_page
     assert "/api/voices" in script
     assert "history-load" not in script
     assert "打开</button>" not in script
@@ -95,7 +97,7 @@ def test_frontend_hides_legacy_analysis_lists_when_content_logic_exists():
 
 def test_frontend_voice_generation_requires_selected_voice_before_request():
     script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    handler_body = _event_listener_body(script, "videoButton", "click")
+    handler_body = _event_listener_body(script, "voiceButton", "click")
 
     assert "const selectedVoiceId = document.querySelector('#voice-select').value" in handler_body
     assert "请先创建或选择音色" in handler_body
@@ -106,7 +108,7 @@ def test_frontend_voice_generation_requires_selected_voice_before_request():
 def test_frontend_voice_generation_uses_hook_plus_script_text():
     script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     helper_body = _function_body(script, "speechTextForScript")
-    handler_body = _event_listener_body(script, "videoButton", "click")
+    handler_body = _event_listener_body(script, "voiceButton", "click")
 
     assert "short_video_script?.hook" in helper_body
     assert "short_video_script?.script" in helper_body
@@ -114,7 +116,7 @@ def test_frontend_voice_generation_uses_hook_plus_script_text():
     assert "const text = speechTextForScript(stageState.script);" in handler_body
 
 
-def test_frontend_hydrates_legacy_video_audio_as_voice():
+def test_frontend_hydrates_voice_audio():
     script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     hydrate_body = _function_body(script, "hydrateSavedRecord")
 
@@ -139,8 +141,8 @@ def test_history_detail_renders_hook_and_script_together():
     script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     detail_body = _function_body(script, "renderRecordDetail")
 
-    assert "speechTextForShortVideoScript(script)" in detail_body
-    assert "function speechTextForShortVideoScript" in script
+    assert "speechTextForOralScript(script)" in detail_body
+    assert "function speechTextForOralScript" in script
 
 
 def test_voice_controls_collapse_to_one_column_on_mobile():

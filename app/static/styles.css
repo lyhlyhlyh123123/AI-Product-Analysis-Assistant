@@ -253,7 +253,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 #script-hook { color: #0f766e; line-height: 1.55; font-size: 1.02rem; }
 #script-body { margin: 0; line-height: 1.7; color: #263238; }
 .voice-workspace { display: grid; gap: 14px; border-top: 1px solid #e2e8ec; padding-top: 16px; }
-.video { width: min(300px, 100%); aspect-ratio: 9 / 16; background: #111827; border-radius: 8px; }
 .audio-player { width: min(560px, 100%); }
 .voice-controls { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 14px; }
 .voice-controls textarea { min-height: 92px; }

@@ -164,8 +164,13 @@
             </div>
           </div>
           <section class="script-copy">
-            <strong id="script-hook"></strong>
-            <p id="script-body"></p>
+            <label>开头钩子
+              <input id="script-hook" type="text" placeholder="输入口播开头钩子">
+            </label>
+            <label>口播正文
+              <textarea id="script-body" rows="5" placeholder="输入口播正文"></textarea>
+            </label>
+            <button id="save-script-button" type="button">保存文案</button>
           </section>
           <section class="voice-workspace" aria-label="口播语音设置">
             <div class="voice-controls">
@@ -188,9 +193,10 @@
                 <input id="sample-rate" type="number" value="24000" min="8000" step="1000">
               </label>
               <button id="create-voice-button" type="button">创建音色</button>
+              <button id="delete-voice-button" type="button">删除选中音色</button>
             </div>
-            <button id="video-button" type="button">制作口播语音</button>
-            <div id="video-panel" class="video-panel hidden">
+            <button id="voice-button" type="button">制作口播语音</button>
+            <div id="voice-panel" class="voice-panel hidden">
               <audio id="voice-audio" controls class="audio-player hidden"></audio>
               <div id="download-links" class="download-links"></div>
             </div>
