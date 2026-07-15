@@ -81,18 +81,7 @@ DASHSCOPE_VOICE_ID=
 ```bash
 docker build -t ai-product-analysis .
 docker run --rm -p 8000:8000 --env-file .env ai-product-analysis
-```
-
-## Render 部署
-
-1. 在 Render 创建 Web Service，连接 GitHub 仓库。
-2. Branch 选择 `main`。
-3. Runtime 选择 `Docker`。
-4. Health Check Path 填 `/health`。
-5. 配置环境变量，至少建议配置 `DEEPSEEK_API_KEY` 和 `FIRECRAWL_API_KEY`。
-6. 部署完成后访问 Render 提供的 HTTPS URL。
-
-Render 免费服务可能冷启动，首次访问可能需要等待几十秒。
+``
 
 ## 使用检查
 
