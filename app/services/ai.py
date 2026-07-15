@@ -279,7 +279,7 @@ def _generate_script_with_deepseek(product: ProductInfo, analysis: AnalysisResul
         settings,
         "你是中文带货短视频编导。只输出 JSON 对象，不要 Markdown。",
         {
-            "task": "基于商品信息和产品分析生成短视频口播文案。不要写成商品说明书，要像短视频博主真实口播。脚本必须150字以内，前5秒有吸引继续观看的钩子，必须体现谁会喜欢、关键卖点和具体使用场景，避免空泛词，不要出现不适合、跳过、劝退等负向推荐表达。",
+            "task": "基于商品信息和产品分析生成短视频口播文案。不要写成商品说明书，要像短视频博主真实口播。脚本必须150字以内，前5秒有吸引继续观看的钩子，必须体现谁会喜欢、关键卖点和具体使用场景，避免空泛词，不要出现不适合、跳过、劝退等负向推荐表达。语句、语义、语法必须清晰，没有明显错误。",
             "schema": {"hook": "反差/问题/场景式开头钩子", "script": "150字以内中文口播：谁会喜欢 + 关键卖点 + 使用场景 + 推荐理由", "image_prompt": "竖屏封面提示词", "tts_text": "TTS文本"},
             "product": product.model_dump(),
             "analysis": analysis.model_dump(),

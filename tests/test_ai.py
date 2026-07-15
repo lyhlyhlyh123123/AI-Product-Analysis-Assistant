@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.config import Settings
 from app.models import AnalysisResult, AnalyzeResponse, FieldValue, ProductInfo
-from app.services.ai import _deepseek_json, _extract_json_object, _response_from_ai_data, build_fallback_analysis, enforce_script_limit
+from app.services.ai import _deepseek_json, _extract_json_object, _generate_script_with_deepseek, _response_from_ai_data, build_fallback_analysis, enforce_script_limit
 from app.services.scraper import ProductEvidence
 
 
@@ -116,6 +116,31 @@ def test_generate_short_video_script_tts_text_includes_hook_and_body():
     assert response.short_video_script.script
     assert not response.short_video_script.script.startswith(response.short_video_script.hook)
     assert response.tts_text == f"{response.short_video_script.hook}\n{response.short_video_script.script}"
+
+
+def test_script_prompt_requires_clear_semantics_grammar_and_no_obvious_errors(monkeypatch):
+    captured = {}
+
+    def fake_deepseek_json(settings, system_prompt, payload):
+        captured["system_prompt"] = system_prompt
+        captured["payload"] = payload
+        return {
+            "short_video_script": {"hook": "先看这点", "script": "这款商品适合日常使用。", "word_count": 12},
+            "image_prompt": "",
+            "tts_text": "先看这点\n这款商品适合日常使用。",
+        }
+
+    monkeypatch.setattr("app.services.ai._deepseek_json", fake_deepseek_json)
+    product = ProductInfo(title=FieldValue(value="Portable Blender", source="manual"))
+    analysis = AnalysisResult(selling_points=["USB rechargeable"])
+
+    _generate_script_with_deepseek(product, analysis, Settings(deepseek_api_key="deepseek-key"))
+
+    prompt_text = f"{captured['system_prompt']} {captured['payload']['task']}"
+    assert "语句" in prompt_text
+    assert "语义" in prompt_text
+    assert "语法" in prompt_text
+    assert "没有明显错误" in prompt_text
 
 
 def test_stage_analysis_prompt_lists_content_logic_dimensions_separately():
