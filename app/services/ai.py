@@ -306,6 +306,7 @@ def _deepseek_json(settings: Settings, system_prompt: str, payload: dict[str, An
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
             "temperature": 0.3,
+            "max_tokens": 5000,
             "response_format": {"type": "json_object"},
         },
         timeout=45.0,
@@ -330,6 +331,7 @@ def _generate_with_deepseek(evidence: ProductEvidence, settings: Settings) -> An
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
             "temperature": 0.4,
+            "max_tokens": 5000,
             "response_format": {"type": "json_object"},
         },
         timeout=45.0,
@@ -382,7 +384,35 @@ def _extract_json_object(content: str) -> dict[str, Any]:
     match = re.search(r"\{.*\}", content, flags=re.DOTALL)
     if not match:
         raise ValueError("AI 未返回 JSON 对象")
-    return json.loads(match.group(0))
+    raw_json = match.group(0)
+    try:
+        return json.loads(raw_json)
+    except json.JSONDecodeError:
+        return json.loads(_escape_control_characters_in_json_strings(raw_json))
+
+
+def _escape_control_characters_in_json_strings(value: str) -> str:
+    result: list[str] = []
+    in_string = False
+    escaped = False
+    for char in value:
+        if escaped:
+            result.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            result.append(char)
+            escaped = True
+            continue
+        if char == '"':
+            result.append(char)
+            in_string = not in_string
+            continue
+        if in_string and char in {"\n", "\r", "\t"}:
+            result.append({"\n": "\\n", "\r": "\\r", "\t": "\\t"}[char])
+            continue
+        result.append(char)
+    return "".join(result)
 
 
 def _normalize_localized_product_data(data: Any) -> dict[str, Any]:

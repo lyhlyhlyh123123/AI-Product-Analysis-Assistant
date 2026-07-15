@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.config import Settings
 from app.models import AnalysisResult, AnalyzeResponse, FieldValue, ProductInfo
-from app.services.ai import _response_from_ai_data, build_fallback_analysis, enforce_script_limit
+from app.services.ai import _deepseek_json, _extract_json_object, _response_from_ai_data, build_fallback_analysis, enforce_script_limit
 from app.services.scraper import ProductEvidence
 
 
@@ -25,6 +25,39 @@ def test_analyze_response_serializes_nested_models():
 def test_enforce_script_limit_counts_characters():
     text = "这个厨房神器开头就省时间，" + "好用" * 100
     assert len(enforce_script_limit(text)) <= 150
+
+
+def test_extract_json_object_sanitizes_control_characters_inside_strings():
+    content = '{"analysis": {"selling_points": ["第一行\n第二行"]}}'
+
+    data = _extract_json_object(content)
+
+    assert data["analysis"]["selling_points"] == ["第一行\n第二行"]
+
+
+def test_deepseek_json_requests_json_mode_with_max_tokens(monkeypatch):
+    captured = {}
+
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": '{"ok": true}'}}]}
+
+    def fake_post(url, headers, json, timeout):
+        captured["url"] = url
+        captured["payload"] = json
+        return DummyResponse()
+
+    monkeypatch.setattr("app.services.ai.httpx.post", fake_post)
+
+    result = _deepseek_json(Settings(deepseek_api_key="deepseek-key"), "只输出 JSON 对象。", {"task": "返回 JSON"})
+
+    assert result == {"ok": True}
+    assert captured["payload"]["response_format"] == {"type": "json_object"}
+    assert captured["payload"]["max_tokens"] == 5000
+    assert "JSON" in captured["payload"]["messages"][0]["content"] or "json" in captured["payload"]["messages"][0]["content"].lower()
 
 
 def test_fallback_analysis_uses_product_title():
