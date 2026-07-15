@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 产品分析工作台</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="workspace-shell">
+    <aside class="sidebar" aria-label="工作台导航">
+      <div class="brand-block">
+        <span class="brand-mark">AI</span>
+        <div>
+          <h1>产品分析工作台</h1>
+          <p>Amazon 口播语音生产</p>
+        </div>
+      </div>
+
+      <nav class="side-nav" aria-label="主要阶段">
+        <button type="button" class="nav-item active" data-target="input-page">商品输入</button>
+        <button type="button" class="nav-item" data-target="product-page">产品信息整理</button>
+        <button type="button" class="nav-item" data-target="analysis-page">产品分析</button>
+        <button type="button" class="nav-item" data-target="script-page">视频口播文案</button>
+        <button type="button" class="nav-item" data-target="records-page">历史记录</button>
+      </nav>
+
+      <section class="sidebar-section">
+        <h2>运行状态</h2>
+        <div id="status" class="status" aria-live="polite">等待输入</div>
+      </section>
+    </aside>
+
+    <section class="workspace-main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Step Workspace</p>
+          <h2 id="page-title">商品输入</h2>
+        </div>
+        <div class="topbar-meta">
+          <span>信息整理</span>
+          <span>产品分析</span>
+          <span>口播文案</span>
+          <span>语音</span>
+        </div>
+      </header>
+
+      <section class="page active" id="input-page" data-title="商品输入">
+        <article class="panel input-card">
+          <div class="panel-heading">
+            <span class="step">01</span>
+            <div>
+              <h2>选择信息获取方式</h2>
+              <p>选择抓取方式或手动粘贴内容后，先整理产品名称、品类、价格、核心功能和规格。</p>
+            </div>
+          </div>
+          <form id="extract-form" class="form-grid">
+            <label>信息获取方式
+              <select id="input-method" name="input_method">
+                <option value="firecrawl" selected>Firecrawl 抓取</option>
+                <option value="local">本地抓取</option>
+                <option value="manual">手动复制粘贴</option>
+              </select>
+            </label>
+            <label id="url-field">Amazon 商品链接
+              <input id="url" name="url" type="url" placeholder="https://www.amazon.com/dp/..." required>
+            </label>
+            <label id="manual-field" class="hidden">手动商品描述
+              <textarea id="manual_text" name="manual_text" rows="8" placeholder="把商品标题、卖点、规格粘贴到这里。"></textarea>
+            </label>
+            <button type="submit">整理产品信息</button>
+          </form>
+        </article>
+      </section>
+
+      <section class="page" id="product-page" data-title="产品信息整理">
+        <article class="panel product-card">
+          <div class="panel-heading">
+            <span class="step">02</span>
+            <div>
+              <h2>产品信息整理</h2>
+              <p>从商品页面或手动描述中提取可验证的基础信息。</p>
+            </div>
+          </div>
+          <div class="product-compare">
+            <section class="info-column">
+              <h3>原始页面信息</h3>
+              <div class="product-layout">
+                <img id="product-image" alt="商品图" class="product-image hidden">
+                <dl class="facts">
+                  <div><dt>抓取方式</dt><dd id="scrape-method"></dd></div>
+                  <div><dt>名称</dt><dd id="product-title"></dd></div>
+                  <div><dt>品类</dt><dd id="product-category"></dd></div>
+                  <div><dt>价格</dt><dd id="product-price"></dd></div>
+                  <div><dt>评分</dt><dd id="product-rating"></dd></div>
+                  <div><dt>评论</dt><dd id="product-reviews"></dd></div>
+                </dl>
+              </div>
+              <div class="detail-grid single">
+                <section>
+                  <h3>核心功能</h3>
+                  <ul id="product-features"></ul>
+                </section>
+                <section>
+                  <h3>规格参数</h3>
+                  <dl id="product-specs" class="specs"></dl>
+                </section>
+              </div>
+            </section>
+
+            <section class="info-column localized-column">
+              <h3>AI 中文整理</h3>
+              <dl class="facts">
+                <div><dt>名称</dt><dd id="localized-title"></dd></div>
+                <div><dt>品类</dt><dd id="localized-category"></dd></div>
+                <div><dt>价格</dt><dd id="localized-price"></dd></div>
+                <div><dt>评分</dt><dd id="localized-rating"></dd></div>
+                <div><dt>评论</dt><dd id="localized-reviews"></dd></div>
+              </dl>
+              <section class="localized-summary">
+                <h3>中文摘要</h3>
+                <p id="localized-summary"></p>
+              </section>
+              <div class="detail-grid single">
+                <section>
+                  <h3>中文核心功能</h3>
+                  <ul id="localized-features"></ul>
+                </section>
+                <section>
+                  <h3>中文规格参数</h3>
+                  <dl id="localized-specs" class="specs"></dl>
+                </section>
+              </div>
+            </section>
+          </div>
+          <section id="product-qa" class="qa-panel empty-state">产品信息 QA 尚未运行</section>
+          <button id="analysis-button" type="button">生成产品分析</button>
+        </article>
+      </section>
+
+      <section class="page" id="analysis-page" data-title="产品分析">
+        <article class="panel analysis-card">
+          <div class="panel-heading">
+            <span class="step">03</span>
+            <div>
+              <h2>产品分析</h2>
+              <p>基于产品信息理解目标用户、使用场景、痛点和卖点。</p>
+            </div>
+          </div>
+          <div id="analysis-logic" class="analysis-logic"></div>
+          <div id="analysis-sections" class="analysis-sections"></div>
+          <section id="analysis-qa" class="qa-panel empty-state">产品分析 QA 尚未运行</section>
+          <button id="script-button" type="button">生成视频口播文案</button>
+        </article>
+      </section>
+
+      <section class="page" id="script-page" data-title="视频口播文案">
+        <article class="panel script-panel">
+          <div class="panel-heading">
+            <span class="step">04</span>
+            <div>
+              <h2>视频口播文案</h2>
+              <p>150 字以内，前 5 秒有吸引继续观看的钩子。</p>
+            </div>
+          </div>
+          <section class="script-copy">
+            <strong id="script-hook"></strong>
+            <p id="script-body"></p>
+          </section>
+          <section class="voice-workspace" aria-label="口播语音设置">
+            <div class="voice-controls">
+              <label>已保存音色
+                <select id="voice-select"><option value="">先创建或选择音色</option></select>
+              </label>
+              <label>音色名称
+                <input id="voice-id" type="text" value="custom_voice">
+              </label>
+              <label>声音描述
+                <textarea id="voice-instruction" rows="3" placeholder="年轻活泼的女性声音，语速偏快，适合介绍时尚产品"></textarea>
+              </label>
+              <label>音频格式
+                <select id="voice-format">
+                  <option value="wav">wav</option>
+                  <option value="mp3">mp3</option>
+                </select>
+              </label>
+              <label>采样率
+                <input id="sample-rate" type="number" value="24000" min="8000" step="1000">
+              </label>
+              <button id="create-voice-button" type="button">创建音色</button>
+            </div>
+            <button id="video-button" type="button">制作口播语音</button>
+            <div id="video-panel" class="video-panel hidden">
+              <audio id="voice-audio" controls class="audio-player hidden"></audio>
+              <div id="download-links" class="download-links"></div>
+            </div>
+            <div id="asset-empty" class="empty-state">尚未生成口播语音</div>
+          </section>
+        </article>
+      </section>
+
+      <section class="page" id="records-page" data-title="历史记录">
+        <article class="panel records-page-card">
+          <div class="panel-heading">
+            <span class="step">R</span>
+            <div>
+              <h2>历史记录</h2>
+              <p>查看所有链接的产品信息、分析、口播文案和语音产物。</p>
+            </div>
+          </div>
+          <div class="records-toolbar">
+            <button id="refresh-records" type="button">刷新记录</button>
+          </div>
+          <div id="records-list" class="records-list-main"></div>
+        </article>
+      </section>
+
+      <section id="warnings-panel" class="panel warnings-panel hidden">
+        <div class="panel-heading">
+          <span class="step">!</span>
+          <div>
+            <h2>质量提示</h2>
+            <p>抓取、模型和素材生成状态。</p>
+          </div>
+        </div>
+        <ul id="warnings"></ul>
+      </section>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

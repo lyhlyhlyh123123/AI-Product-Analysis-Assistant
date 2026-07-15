@@ -1,0 +1,12 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+httpx==0.28.1
+beautifulsoup4==4.12.3
+firecrawl-py==4.32.0
+pillow==11.0.0
+moviepy==1.0.3
+pytest==8.3.4
+python-multipart==0.0.20
+langgraph==0.2.60
+dashscope==1.23.9
