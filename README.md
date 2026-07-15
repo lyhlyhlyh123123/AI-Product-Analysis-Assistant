@@ -1,6 +1,6 @@
 # AI 产品分析助手
 
-一个用于 AI 工程师实习生笔试题的 FastAPI 网页工具。输入 Amazon 商品链接后，系统提取商品信息，生成产品分析、150 字以内中文短视频口播文案，并可在配置 TTS 后尝试合成竖屏 MP4 商品短视频。
+一个面向 Amazon 商品内容分析的网页工具。输入商品链接或粘贴商品描述后，系统会整理产品信息，生成中文产品分析和 150 字以内的口播文案，并可在配置 TTS 后生成口播音频。
 
 ## 功能
 
@@ -9,18 +9,17 @@
 - 手动商品描述输入，适用于验证码、地区差异、反爬或字段缺失。
 - 产品信息整理：标题、分类、价格、评分、评论数、图片、卖点、规格。
 - 产品分析：目标用户、使用场景、用户痛点、核心卖点、内容角度。
-- 150 字以内中文短视频口播文案，开头包含钩子。
-- 可选生成封面图、TTS 音频和竖屏 MP4。
+- 150 字以内中文口播文案，开头包含钩子。
+- 可选生成 TTS 口播音频。
 - 静态单页前端，无需登录。
 
 ## 技术方案
 
 - 后端：FastAPI + Pydantic。
-- 工作流：LangGraph 编排产品信息整理、产品分析、口播文案和短视频生成阶段。
+- 工作流：LangGraph 编排产品信息整理、产品分析、口播文案和口播语音阶段。
 - 抓取：Firecrawl SDK 或 `httpx` 请求 Amazon 页面，BeautifulSoup 按 DOM/metadata 规则提取字段。
 - AI：DeepSeek Chat Completions API，可缺省回退到本地确定性中文分析。
-- TTS：DashScope，可缺省跳过。
-- 视频：Pillow 生成竖屏封面，MoviePy/FFmpeg 在音频可用时合成 MP4。
+- 语音：DashScope TTS 生成口播音频，未配置时跳过语音生成。
 - 部署：Docker + Render Web Service。
 
 ## 本地启动
@@ -32,13 +31,11 @@ uvicorn app.main:app --reload
 
 打开：`http://127.0.0.1:8000`
 
-运行测试：
+开发检查：
 
 ```bash
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -v
 ```
-
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` 用于避免本机全局 pytest 插件影响项目测试。
 
 ## 环境变量
 
@@ -57,15 +54,7 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
 DASHSCOPE_TTS_MODEL=cosyvoice-v1
 DASHSCOPE_PREFERRED_VOICE_NAME=longxiaochun
 DASHSCOPE_VOICE_ID=
-
-VOLCENGINE_ARK_API_KEY=
-VOLCENGINE_ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-VOLCENGINE_ARK_IMAGE_MODEL=
-VOLCENGINE_ARK_IMAGE_SIZE=2K
-VOLCENGINE_ARK_DISABLE_WATERMARK=true
 ```
-
-当前实现中 Volcengine Ark 配置预留给图片生成增强能力；没有配置时使用本地 Pillow 封面。
 
 ## API
 
@@ -81,11 +70,11 @@ VOLCENGINE_ARK_DISABLE_WATERMARK=true
 }
 ```
 
-返回包含 `task_id`、`product`、`analysis`、`short_video_script`、`image_prompt`、`tts_text` 和 `warnings`。
+返回包含 `task_id`、`product`、`analysis`、`short_video_script`、`tts_text` 和 `warnings`。
 
-### `POST /api/generate-video`
+### `POST /api/generate-voice`
 
-请求可直接使用 `/api/analyze` 的返回 JSON。若未配置 DashScope，会返回封面图 URL 和明确 warning，不阻塞主分析功能。
+根据任务 ID、口播文本和已创建的音色生成口播音频。若未配置 DashScope，会返回明确 warning，不阻塞产品分析和文案生成。
 
 ## Docker
 
@@ -104,14 +93,13 @@ docker run --rm -p 8000:8000 --env-file .env ai-product-analysis
 
 Render 免费服务可能冷启动，首次访问可能需要等待几十秒。
 
-## 验收建议
+## 使用检查
 
-- 测试题目给出的两个 Amazon 链接。
-- 再测试至少一个无关 Amazon 商品链接，确认不是硬编码。
-- 测试手动商品描述兜底功能。
-- 测试未配置 API Key 时的提示。
-- 配置 DashScope 后测试 TTS 和 MP4 生成。
-- 确认视频能在浏览器播放并可下载。
+- 使用 Firecrawl 抓取一个 Amazon 商品链接，确认产品信息可以整理。
+- 使用本地抓取模式检查 Amazon 页面可访问时的提取效果。
+- 使用手动复制粘贴模式检查商品描述输入流程。
+- 未配置 API Key 时，确认页面会显示明确提示，不阻塞基础流程。
+- 配置 DashScope 后，确认口播音频可以生成并播放。
 
 ## 已知限制
 
@@ -119,5 +107,5 @@ Render 免费服务可能冷启动，首次访问可能需要等待几十秒。
 - 价格和库存会随地区、时间和账号状态变化。
 - 有些商品页不会暴露完整规格。
 - 本地兜底分析不等同于大模型质量，只保证主流程可用。
-- 视频合成依赖 FFmpeg 和服务器 CPU，免费部署环境可能较慢。
+- 口播语音生成依赖 DashScope 配置和接口可用性。
 - 真实凭据曾在对话中出现，发布或提交项目前建议到对应平台后台轮换一次密钥。
